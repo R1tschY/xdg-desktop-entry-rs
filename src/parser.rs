@@ -9,18 +9,30 @@ use nom::{
     combinator::{map, peek, cut},
 };
 use std::collections::HashMap;
+use nom::character::complete::space1;
+use nom::error::ErrorKind;
+use nom::multi::many0;
+use nom::sequence::{delimitedc, delimited};
+use crate::errors::{ParseResult, ParseError};
+use nom::combinator::{complete, all_consuming};
 
-fn eof(input: &str) -> IResult<&str, ()> {
-    eof!(input,)?;
-    Ok((input, ()))
+fn eof(input: &str) -> IResult<&str, &str> {
+    eof!(input,)
 }
 
 fn eol(input: &str) -> IResult<&str, ()> {
-    map(char('\n'), |_| ())(input)
+    alt((map(char('\n'), |_| ()), map(eof, |_| ())))(input)
+}
+
+fn empty_line(input: &str) -> IResult<&str, ()> {
+    alt((
+        preceded(space0, map(char('\n'), |_| ())),
+        preceded(space1, map(eof, |_| ())),
+    ))(input)
 }
 
 fn comment(input: &str) -> IResult<&str, &str> {
-    preceded(char('#'), take_while(|c| c != '\n'))(input)
+    delimited(char('#'), take_while(|c| c != '\n'), eol)(input)
 }
 
 fn group_header(input: &str) -> IResult<&str, &str> {
@@ -28,10 +40,7 @@ fn group_header(input: &str) -> IResult<&str, &str> {
         char('['),
         cut(terminated(
             take_while(|c| c != ']'),
-            pair(
-                char(']'),
-                alt((peek(eol), eof))
-            )
+            pair(char(']'), eol)
         ))
     )(input)
 }
@@ -45,82 +54,54 @@ fn kv_sep(input: &str) -> IResult<&str, &str> {
 }
 
 fn entry(input: &str) -> IResult<&str, (&str, &str)> {
-    separated_pair(
-        key, tuple((space0, char('='), space0)), take_while(|c| c != '\n')
+    terminated(
+        separated_pair(
+            key, tuple((space0, char('='), space0)), take_while(|c| c != '\n')
+        ),
+        eol
     )(input)
 }
 
 fn entries(input: &str) -> IResult<&str, HashMap<&str, &str>> {
     map(
-        separated_list(
-            char('\n'),
-            cut(alt((
+        many0(
+            alt((
                 map(comment, |_| None),
                 map(entry, |x| Some(x)),
-                map(space0, |_| None),
-            )))
+                map(empty_line, |_| None),
+            ))
         ),
-        |kvs: Vec<_>| kvs.iter().filter_map(|&x| x).collect()
+        |kvs: Vec<_>| kvs.into_iter().flatten().collect()
     )(input)
 }
-/*
-named!(comment<CompleteStr, Line>,
-    do_parse!(
-        char!('#') >>
-        take_while1!(|_| true) >>
-        (Line::Ignore)
-    )
-);
-
-named!(groupheader<CompleteStr, Line>,
-    exact!(do_parse!(
-        char!('[') >>
-        groupname: take_while!(|c| c != ']') >>
-        return_error!(ErrorKind::Custom(ERROR_INCOMPLETE_GROUPNAME), char!(']')) >>
-        (Line::Group(groupname.as_ref()))
-    ))
-);
 
 
-
-
-named!(line<CompleteStr, Line>,
-    alt!(comment | groupheader | keyvalue)
-);*/
-
-
-/*
-fn parse_line(input: &str) -> ParseResult<Line> {
-    match line(input.trim().into()) {
-        Ok((_rest, result)) => Ok(result),
-        Err(_) => Err(ParseError::InvalidLine(input.into())),
-    }
+fn group(input: &str) -> IResult<&str, (&str, HashMap<&str, &str>)> {
+    pair(
+        group_header,
+        entries
+    )(input)
 }
 
-fn parse_file(input: &str) -> ParseResult<HashMap<&str, HashMap<&str, &str>>> {
-    use Line::*;
-    let mut cur_group: &str = &"";
-    let mut result: HashMap<&str, HashMap<&str, &str>> = HashMap::new();
+fn groups(input: &str) -> IResult<&str, HashMap<&str, HashMap<&str, &str>>> {
+    map(
+        many0(
+            alt((
+                map(comment, |_| None),
+                map(group, |x| Some(x)),
+                map(empty_line, |_| None),
+            ))
+        ),
+        |grps: Vec<_>| grps.into_iter().flatten().collect()
+    )(input)
+}
 
-    for line in input.lines() {
-        match parse_line(line)? {
-            Ignore => {},
-            Group(group) => {
-                assert!(!group.is_empty());
-                assert!(!result.contains_key(group));
-                cur_group = group;
-                result.insert(group, HashMap::new());
-            },
-            KeyValue(key, value) => {
-                assert!(!cur_group.is_empty());
-                assert!(!result[cur_group].contains_key(key));
-                result.get_mut(cur_group).unwrap().insert(key, value);
-            },
-        }
+pub fn parse_desktop_entry(input: &str) -> ParseResult<HashMap<&str, HashMap<&str, &str>>> {
+    match all_consuming(groups)(input) {
+        Err(err) => Err(ParseError::InvalidLine("".into())),
+        Ok((_, res)) => Ok(res)
     }
-
-    Ok(result)
-}*/
+}
 
 #[cfg(test)]
 mod tests {
@@ -129,10 +110,10 @@ mod tests {
 
     #[test]
     fn test_parse_comment() {
-        assert_eq!(Ok(("\nY", " abc")), comment("# abc\nY"));
-        assert_eq!(Ok(("\nY", " abc def ## []")), comment("# abc def ## []\nY"));
-        assert_eq!(Ok(("\nY", "## abc ###   ")), comment("### abc ###   \nY"));
-        assert_eq!(Ok(("\nY", "## abc ###   ")), comment("### abc ###   \nY"));
+        assert_eq!(Ok(("Y", " abc")), comment("# abc\nY"));
+        assert_eq!(Ok(("Y", " abc def ## []")), comment("# abc def ## []\nY"));
+        assert_eq!(Ok(("Y", "## abc ###   ")), comment("### abc ###   \nY"));
+        assert_eq!(Ok(("Y", "## abc ###   ")), comment("### abc ###   \nY"));
 
         assert_eq!(comment("  \nY"), Err(Err::Error(error_position!("  \nY", ErrorKind::Char))));
         assert_matches!(comment("  #\nY".into()), Err(Err::Error(_)));
@@ -141,8 +122,8 @@ mod tests {
 
     #[test]
     fn test_parse_group_header() {
-        assert_eq!(Ok(("\nY", "a")), group_header("[a]\nY"));
-        assert_eq!(Ok(("\nY", "abc def")), group_header("[abc def]\nY"));
+        assert_eq!(Ok(("Y", "a")), group_header("[a]\nY"));
+        assert_eq!(Ok(("Y", "abc def")), group_header("[abc def]\nY"));
         // assert_eq!(Ok(("", "a")), group_header("[a]    \t\n"));
 
         assert_matches!(group_header(" [a]\nY"), Err(Err::Error(_)));
@@ -153,23 +134,23 @@ mod tests {
 
     #[test]
     fn test_parse_entry() {
-        assert_eq!(Ok(("\nY", ("abc", "def"))), entry("abc=def\nY"));
+        assert_eq!(Ok(("Y", ("abc", "def"))), entry("abc=def\nY"));
 
         // ignore space before and after =
-        assert_eq!(Ok(("\nY", ("abc", "def"))), entry("abc   = def\nY"));
-        assert_eq!(Ok(("\nY", ("abc", ""))), entry("abc =\nY"));
-        assert_eq!(Ok(("\nY", ("abc", "def  "))), entry("abc =  def  \nY"));
+        assert_eq!(Ok(("Y", ("abc", "def"))), entry("abc   = def\nY"));
+        assert_eq!(Ok(("Y", ("abc", ""))), entry("abc =\nY"));
+        assert_eq!(Ok(("Y", ("abc", "def  "))), entry("abc =  def  \nY"));
 
         // key
-        assert_eq!(Ok(("\nY", ("-a-b-c-", "def"))), entry("-a-b-c-=def\nY"));
-        assert_eq!(Ok(("\nY", ("ABC", "def"))), entry("ABC=def\nY"));
+        assert_eq!(Ok(("Y", ("-a-b-c-", "def"))), entry("-a-b-c-=def\nY"));
+        assert_eq!(Ok(("Y", ("ABC", "def"))), entry("ABC=def\nY"));
         assert_matches!(entry("a b=\nY"), Err(Err::Error(_)));
         assert_matches!(entry("[a=b]\nY"), Err(Err::Error(_)));
 
         // empty key
-        assert_eq!(Ok(("\nY", ("", "def"))), entry("=def\nY"));
-        assert_eq!(Ok(("\nY", ("", ""))), entry("=\nY"));
-        assert_eq!(Ok(("\nY", ("", ""))), entry("  =   \nY"));
+        assert_eq!(Ok(("Y", ("", "def"))), entry("=def\nY"));
+        assert_eq!(Ok(("Y", ("", ""))), entry("=\nY"));
+        assert_eq!(Ok(("Y", ("", ""))), entry("  =   \nY"));
     }
 
     #[test]
@@ -215,6 +196,103 @@ mod tests {
                 def=abc
 
                 [group]
+            "))
+        );
+    }
+
+    #[test]
+    fn test_parse_desktop_entry_comments() {
+        assert_eq!(
+            Ok(hashmap!(
+                "Desktop Entry" => hashmap!(
+                    "Version" => "1.0",
+                ),
+                "Desktop Action Gallery" => hashmap!(
+                    "Exec" => "fooview --gallery",
+                )
+            )),
+            parse_desktop_entry(indoc!("
+
+                # Copyright by
+                #          Dr. Who
+
+                [Desktop Entry]
+
+                # app version
+
+                Version=1.0
+
+                ## Actions
+
+                [Desktop Action Gallery]
+                Exec=fooview --gallery
+
+                # Last Line"))
+        );
+    }
+
+    #[test]
+    fn test_parse_desktop_entry_non_empty_last_line() {
+        assert_eq!(
+            Ok(hashmap!(
+                "Desktop Entry" => hashmap!("Version" => "1.0")
+            )),
+            parse_desktop_entry("[Desktop Entry]\nVersion=1.0")
+        );
+
+        assert_eq!(
+            Ok(hashmap!(
+                "Desktop Entry" => hashmap!()
+            )),
+            parse_desktop_entry("[Desktop Entry]")
+        );
+    }
+
+    #[test]
+    fn test_parse_desktop_entry_spec_example() {
+        assert_eq!(
+            Ok(hashmap!(
+                "Desktop Entry" => hashmap!(
+                    "Version" => "1.0",
+                    "Type" => "Application",
+                    "Name" => "Foo Viewer",
+                    "Comment" => "The best viewer for Foo objects available!",
+                    "TryExec" => "fooview",
+                    "Exec" => "fooview %F",
+                    "Icon" => "fooview",
+                    "MimeType" => "image/x-foo;",
+                    "Actions" => "Gallery;Create;"
+                ),
+                "Desktop Action Gallery" => hashmap!(
+                    "Exec" => "fooview --gallery",
+                    "Name" => "Browse Gallery"
+                ),
+                "Desktop Action Create" => hashmap!(
+                    "Exec" => "fooview --create-new",
+                    "Name" => "Create a new Foo!",
+                    "Icon" => "fooview-new"
+                ),
+            )),
+            parse_desktop_entry(indoc!("
+                [Desktop Entry]
+                Version=1.0
+                Type=Application
+                Name=Foo Viewer
+                Comment=The best viewer for Foo objects available!
+                TryExec=fooview
+                Exec=fooview %F
+                Icon=fooview
+                MimeType=image/x-foo;
+                Actions=Gallery;Create;
+
+                [Desktop Action Gallery]
+                Exec=fooview --gallery
+                Name=Browse Gallery
+
+                [Desktop Action Create]
+                Exec=fooview --create-new
+                Name=Create a new Foo!
+                Icon=fooview-new
             "))
         );
     }
