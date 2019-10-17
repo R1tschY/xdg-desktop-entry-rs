@@ -1,20 +1,20 @@
+use std::collections::HashMap;
 use nom::{
+    multi::many0,
+    character::complete::space1,
     IResult,
     bytes::complete::take_while,
     character::complete::char,
     sequence::{separated_pair, tuple, preceded, terminated, pair},
     character::complete::{space0},
-    multi::{separated_list},
     branch::alt,
-    combinator::{map, peek, cut},
+    combinator::{map, cut},
+    combinator::{all_consuming}
 };
-use std::collections::HashMap;
-use nom::character::complete::space1;
-use nom::error::ErrorKind;
-use nom::multi::many0;
-use nom::sequence::{delimitedc, delimited};
 use crate::errors::{ParseResult, ParseError};
-use nom::combinator::{complete, all_consuming};
+use nom::sequence::delimited;
+use nom::combinator::{recognize, opt};
+use nom::bytes::complete::take_while1;
 
 fn eof(input: &str) -> IResult<&str, &str> {
     eof!(input,)
@@ -46,11 +46,14 @@ fn group_header(input: &str) -> IResult<&str, &str> {
 }
 
 fn key(input: &str) -> IResult<&str, &str> {
-    take_while(|c: char| c.is_ascii_alphanumeric() || c == '-')(input)
-}
-
-fn kv_sep(input: &str) -> IResult<&str, &str> {
-    take_while(|c: char| c.is_ascii_alphanumeric() || c == '-')(input)
+    recognize(tuple((
+        take_while(|c: char| c.is_ascii_alphanumeric() || c == '-'),
+        opt(delimited(
+            char('['),
+            take_while1(|c: char| c != ']'),
+            char(']'),
+        ))
+    )))(input)
 }
 
 fn entry(input: &str) -> IResult<&str, (&str, &str)> {
@@ -98,7 +101,7 @@ fn groups(input: &str) -> IResult<&str, HashMap<&str, HashMap<&str, &str>>> {
 
 pub fn parse_desktop_entry(input: &str) -> ParseResult<HashMap<&str, HashMap<&str, &str>>> {
     match all_consuming(groups)(input) {
-        Err(err) => Err(ParseError::InvalidLine("".into())),
+        Err(_) => Err(ParseError::InvalidLine("".into())),
         Ok((_, res)) => Ok(res)
     }
 }

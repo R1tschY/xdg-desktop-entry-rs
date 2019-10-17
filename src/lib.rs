@@ -3,5 +3,10 @@
 #[cfg(test)] #[macro_use] extern crate indoc;
 #[cfg(test)] #[macro_use] extern crate maplit;
 
-pub mod parser;
-pub mod errors;
+mod parser;
+mod errors;
+mod desktop_entry;
+mod locale;
+
+pub use errors::{ParseError, ParseResult};
+pub use desktop_entry::{DesktopEntry, StandardKey};
