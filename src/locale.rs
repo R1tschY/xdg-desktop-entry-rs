@@ -52,6 +52,10 @@ impl Locale {
         }
     }
 
+    pub fn from_string(lang_str: &str) -> Option<Self> {
+        parse_locale(lang_str)
+    }
+
     pub fn lang(&self) -> &str { &self.lang }
     pub fn country(&self) -> Option<&str> { self.country.as_ref().map(|x| x as &str) }
     pub fn modifier(&self) -> Option<&str> { self.modifier.as_ref().map(|x| x as &str) }

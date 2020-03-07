@@ -46,14 +46,14 @@ fn group_header(input: &str) -> IResult<&str, &str> {
 }
 
 fn key(input: &str) -> IResult<&str, &str> {
-    recognize(tuple((
+    recognize(pair(
         take_while(|c: char| c.is_ascii_alphanumeric() || c == '-'),
         opt(delimited(
             char('['),
             take_while1(|c: char| c != ']'),
             char(']'),
         ))
-    )))(input)
+    ))(input)
 }
 
 fn entry(input: &str) -> IResult<&str, (&str, &str)> {

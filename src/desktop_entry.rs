@@ -78,12 +78,21 @@ impl<'a> DesktopEntry<'a> {
         })
     }
 
+    pub fn from_group_values(input: HashMap<&'a str, HashMap<&'a str, &'a str>>) -> Self {
+        Self {
+            groups: input
+        }
+    }
+
     pub fn get_key(&self, key: StandardKey) -> Option<&str> {
         self.group_get("Desktop Entry", key.key_name())
     }
 
     pub fn get(&self, key: &str) -> Option<&str> {
         self.group_get("Desktop Entry", key)
+    }
+    pub fn localized_get(&self, key: &str, locale: &Option<Locale>) -> Option<&str> {
+        self.group_localized_get("Desktop Entry", key, locale)
     }
 
     pub fn keys(&self) -> Vec<&str> {
@@ -141,5 +150,64 @@ impl<'a> DesktopEntry<'a> {
         }
 
         entries.get(key).map(|&x| x)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_raw_access() {
+        let entry = DesktopEntry::from_group_values(hashmap!(
+            "Desktop Entry" => hashmap!(
+                "Name" => "Test"
+            )
+        ));
+
+        assert_eq!(entry.get("Name"), Some("Test"));
+        assert_eq!(entry.get("Exec"), None);
+        assert_eq!(entry.keys(), vec!["Name"]);
+        assert_eq!(entry.get_key(StandardKey::Name), Some("Test"));
+    }
+
+    #[test]
+    fn test_local_access_all() {
+        let locale = Locale::from_string("de_DE");
+        let entry = DesktopEntry::from_group_values(hashmap!(
+            "Desktop Entry" => hashmap!(
+                "Name[en]" => "App",
+                "Name[de]" => "Anw",
+                "Name[de_DE]" => "Anwend",
+                "Name[de_DE@nord]" => "Anwendung",
+            )
+        ));
+
+        assert_eq!(entry.localized_get("Name", &locale), Some("Anwend"));
+    }
+
+    #[test]
+    fn test_local_access_inaccurate() {
+        let locale = Locale::from_string("de_DE");
+        let entry = DesktopEntry::from_group_values(hashmap!(
+            "Desktop Entry" => hashmap!(
+                "Name" => "App",
+                "Name[de]" => "Anw",
+            )
+        ));
+
+        assert_eq!(entry.localized_get("Name", &locale), Some("Anw"));
+    }
+
+    #[test]
+    fn test_local_access_no() {
+        let locale = Locale::from_string("de_DE");
+        let entry = DesktopEntry::from_group_values(hashmap!(
+            "Desktop Entry" => hashmap!(
+                "Name" => "App",
+            )
+        ));
+
+        assert_eq!(entry.localized_get("Name", &locale), Some("App"));
     }
 }
