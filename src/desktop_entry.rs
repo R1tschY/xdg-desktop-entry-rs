@@ -98,12 +98,12 @@ impl<'a> DesktopEntry<'a> {
 
     pub fn group_keys(&self, group: &str) -> Vec<&str> {
         self.groups.get(group)
-            .map(|grp| grp.keys().map(|&x| x).collect())
+            .map(|grp| grp.keys().copied().collect())
             .unwrap_or_else(|| vec![])
     }
 
     pub fn group_get(&self, group: &str, key: &str) -> Option<&str> {
-        self.groups.get(group).and_then(|grp| grp.get(key).map(|&x| x))
+        self.groups.get(group).and_then(|grp| grp.get(key).copied())
     }
 
     pub fn group_localized_get(
@@ -146,7 +146,7 @@ impl<'a> DesktopEntry<'a> {
             }
         }
 
-        entries.get(key).map(|&x| x)
+        entries.get(key).copied()
     }
 }
 

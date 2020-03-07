@@ -70,7 +70,7 @@ fn entries(input: &str) -> IResult<&str, HashMap<&str, &str>> {
         many0(
             alt((
                 map(comment, |_| None),
-                map(entry, |x| Some(x)),
+                map(entry, Some),
                 map(empty_line, |_| None),
             ))
         ),
@@ -91,7 +91,7 @@ fn groups(input: &str) -> IResult<&str, HashMap<&str, HashMap<&str, &str>>> {
         many0(
             alt((
                 map(comment, |_| None),
-                map(group, |x| Some(x)),
+                map(group, Some),
                 map(empty_line, |_| None),
             ))
         ),
