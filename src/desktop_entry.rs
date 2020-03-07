@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 use crate::ParseResult;
 use crate::parser::parse_desktop_entry;
 use crate::locale::Locale;
@@ -66,14 +65,12 @@ impl StandardKey {
 
 
 pub struct DesktopEntry<'a> {
-    path: PathBuf,
     groups: HashMap<&'a str, HashMap<&'a str, &'a str>>,
 }
 
 impl<'a> DesktopEntry<'a> {
     pub fn parse_string(input: &'a str) -> ParseResult<Self> {
         Ok(Self {
-            path: PathBuf::new(),
             groups: parse_desktop_entry(input)?
         })
     }

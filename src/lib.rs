@@ -7,6 +7,9 @@ mod parser;
 mod errors;
 mod desktop_entry;
 mod locale;
+mod discover;
+mod utils;
 
-pub use errors::{ParseError, ParseResult};
-pub use desktop_entry::{DesktopEntry, StandardKey};
+pub use errors::*;
+pub use desktop_entry::*;
+pub use discover::*;
