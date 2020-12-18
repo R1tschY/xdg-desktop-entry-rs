@@ -10,5 +10,5 @@ indoc = "^0.3"
 maplit = "^1.0"
 
 [dependencies]
-nom = "5.0"
+nom = { version = "6", default-features = false, features = ["alloc"] }
 dirs = "2.0"
