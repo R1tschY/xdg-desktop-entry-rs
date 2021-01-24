@@ -1,8 +1,6 @@
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
-
-use nom::Parser;
 
 /// Determine XDG_DATA_DIRS from
 /// https://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html

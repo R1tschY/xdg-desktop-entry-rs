@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use crate::ParseResult;
-use crate::parser::parse_desktop_entry;
 use crate::locale::Locale;
+use crate::parser::parse_desktop_entry;
+use crate::ParseResult;
+use std::collections::HashMap;
 
 #[derive(PartialEq, Debug)]
 pub enum StandardKey {
@@ -61,9 +61,6 @@ impl StandardKey {
     }
 }
 
-
-
-
 pub struct DesktopEntry<'a> {
     groups: HashMap<&'a str, HashMap<&'a str, &'a str>>,
 }
@@ -71,14 +68,12 @@ pub struct DesktopEntry<'a> {
 impl<'a> DesktopEntry<'a> {
     pub fn parse_string(input: &'a str) -> ParseResult<Self> {
         Ok(Self {
-            groups: parse_desktop_entry(input)?
+            groups: parse_desktop_entry(input)?,
         })
     }
 
     pub fn from_group_values(input: HashMap<&'a str, HashMap<&'a str, &'a str>>) -> Self {
-        Self {
-            groups: input
-        }
+        Self { groups: input }
     }
 
     pub fn get_key(&self, key: StandardKey) -> Option<&str> {
@@ -97,9 +92,10 @@ impl<'a> DesktopEntry<'a> {
     }
 
     pub fn group_keys(&self, group: &str) -> Vec<&str> {
-        self.groups.get(group)
+        self.groups
+            .get(group)
             .map(|grp| grp.keys().copied().collect())
-            .unwrap_or_else(|| vec![])
+            .unwrap_or_default()
     }
 
     pub fn group_get(&self, group: &str, key: &str) -> Option<&str> {
@@ -107,19 +103,17 @@ impl<'a> DesktopEntry<'a> {
     }
 
     pub fn group_localized_get(
-        &self, group: &str, key: &str, locale: &Option<Locale>
+        &self,
+        group: &str,
+        key: &str,
+        locale: &Option<Locale>,
     ) -> Option<&str> {
-        let entries = if let Some(entries) = self.groups.get(group) {
-            entries
-        } else {
-            return None;
-        };
+        let entries = self.groups.get(group)?;
 
         if let Some(locale) = locale {
             if let Some(country) = locale.country() {
                 if let Some(modifier) = locale.modifier() {
-                    let lkey = format!(
-                        "{}[{}_{}@{}]",  key, locale.lang(), country, modifier);
+                    let lkey = format!("{}[{}_{}@{}]", key, locale.lang(), country, modifier);
                     if let Some(result) = entries.get(&(&lkey as &str)) {
                         return Some(result);
                     }
